@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Play Snake. Explore a personal Python learning lab with FastAPI, SQLite and real player analytics.">
+  <title>Snake Lab — Play. Learn. Repeat.</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23b9eb70'/%3E%3Ctext y='29' x='8' font-size='28'%3E↳%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Snake Lab home"><span class="brand-icon">↳</span> snake<span class="muted">lab</span><span class="version">v0.1</span></a>
+      <nav aria-label="Project links"><a href="/docs" target="_blank" rel="noreferrer">Explore the API ↗</a><span class="lab-tag">PERSONAL PYTHON PROJECT</span></nav>
+    </header>
+    <main>
+      <section class="intro">
+        <div><p class="eyebrow"><span class="dot"></span> THE CLASSIC, WITH A LITTLE CURIOSITY</p><h1>Small game.<br>Long learning curve<span class="accent">.</span></h1><p class="subtitle">Chase a snack. Beat your best. Follow the data back to Python.</p></div>
+        <div class="intro-note"><span class="note-arrow">↙</span><p>A familiar game.<br>A backend worth exploring.</p><span>FastAPI · SQLite · pytest</span></div>
+      </section>
+      <div class="workspace">
+        <section class="game-panel" aria-label="Snake game">
+          <div class="panel-top"><span class="eyebrow">01 / THE PLAYGROUND</span><span id="game-state" class="state-chip">READY TO PLAY</span></div>
+          <div class="game-toolbar">
+            <label>YOUR HANDLE<input id="player-name" type="text" value="player" minlength="2" maxlength="20" pattern="[A-Za-z0-9_-]{2,20}" autocomplete="off" spellcheck="false" aria-describedby="handle-help"></label>
+            <label>PACE<select id="mode"><option value="classic">Classic · steady</option><option value="sprint">Sprint · quick</option></select></label>
+            <div class="score-box"><span>SCORE</span><strong id="score">000</strong></div>
+          </div>
+          <p id="handle-help" class="field-help">2–20 letters, numbers, _ or -. Shared nickname; no account.</p>
+          <div class="board-wrap">
+            <canvas id="board" width="600" height="600" tabindex="0" aria-label="Snake board. Use arrow keys or WASD; Space to pause."></canvas>
+            <div id="overlay" class="overlay"><span class="overlay-symbol">↳</span><h2 id="overlay-title">One more bite.</h2><p id="overlay-copy">Pick a handle. Find your rhythm.</p></div>
+            <div class="board-corner">20 × 20 / NO SHORTCUTS</div>
+          </div>
+          <div class="game-actions"><button id="start" class="primary">Start a run <span>↗</span></button><button id="pause" class="secondary" disabled>Pause</button><span class="timer" id="timer">00:00</span></div>
+          <p id="message" role="status" aria-live="polite">Ready when you are. Each snack is worth 10 points.</p>
+          <div id="save-actions" hidden><button id="retry" class="secondary">Retry saving</button><button id="discard" class="text-button">Discard unsaved run</button></div>
+          <div class="touch-controls" aria-label="Direction controls"><button data-direction="up" aria-label="Move up">↑</button><div><button data-direction="left" aria-label="Move left">←</button><button data-direction="down" aria-label="Move down">↓</button><button data-direction="right" aria-label="Move right">→</button></div></div>
+          <div class="instructions"><span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> or WASD to move</span><span><kbd>space</kbd> to pause</span></div>
+        </section>
+        <aside class="sidebar">
+          <section class="card leaderboard"><div class="section-title"><p class="eyebrow">02 / THE LEADERBOARD</p><span class="tiny-icon">↗</span></div><h2>A little competition.</h2><p class="card-copy">Best run per handle. <span id="leaderboard-mode">Classic</span> pace.</p><div class="table-head"><span>PLAYER</span><span>BEST</span></div><ol id="leaderboard"><li class="empty">Loading saved runs…</li></ol><p class="footnote">Ties: shorter active time, then earlier submission.</p><button id="refresh" class="text-button">Refresh data ↻</button></section>
+          <section class="card analytics"><div class="section-title"><p class="eyebrow">03 / YOUR EXPERIMENT</p><span class="tiny-icon">⌁</span></div><h2>Every run tells a story.</h2><p class="card-copy" id="analytics-handle">player / classic</p><div class="metrics"><div><strong id="games">0</strong><span>RUNS PLAYED</span></div><div><strong id="best">0</strong><span>PERSONAL BEST</span></div><div><strong id="average">0</strong><span>AVG. SCORE</span></div><div><strong id="food">0</strong><span>SNACKS EATEN</span></div></div><div class="history-heading"><span>LAST 10 RUNS</span><span>OLDEST → NEWEST</span></div><div id="history" class="history" aria-label="Recent scores"><span class="empty">Your first run starts the story.</span></div><p class="footnote" id="time-played">Active play: 0s · Wins: 0</p><p id="data-message" role="status" class="footnote"></p></section>
+          <div class="learning-note"><span>⌘</span><p><strong>The game is just the beginning.</strong><br>The Python source includes a code reading map, tests, and exercises to make it your own.</p></div>
+        </aside>
+      </div>
+      <section class="lab-strip" aria-label="Lab totals"><span><span class="dot"></span> FROM THE DATABASE</span><p><strong id="total-runs">—</strong> saved runs</p><p><strong id="total-players">—</strong> handles</p><p><strong id="lab-best">—</strong> lab best</p><span class="strip-note">Real data. Even when it starts at zero.</span></section>
+    </main>
+    <footer><span>Built to play. Designed to learn.</span><span>Browser → REST API → Python → SQLite</span><span>Learning project · Client-reported scores</span></footer>
+  </div>
+</body>
+</html>
