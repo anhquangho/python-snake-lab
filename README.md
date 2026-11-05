@@ -30,6 +30,14 @@ On macOS/Linux, create the environment with `python3 -m venv .venv`, and replace
 
 For a small runtime-only installation, use `python -m pip install .` in your chosen environment. This resolves dependencies from the ranges in `pyproject.toml`, rather than the development lock file.
 
+## AI Play
+
+Select **AI Play**, choose OpenAI, Gemini, or Claude, and enter a key for that provider. **Start AI** begins a run with a default limit of 10 calls (adjustable from 1 to 30). Use the local loopback server when testing with a real key.
+
+The model receives the current board and returns a compact route such as `R4,U3`. The browser checks the route with the same game rules used for human play, draws it on the board, and executes it up to the first food or the end of the plan. The dashboard shows checks, progress, API calls, and provider-reported tokens. Expand an entry to inspect the board sent, plan, and latency.
+
+The key is held in the open page and sent to FastAPI as an authorization header for each plan request. **Clear key** and provider changes clear the field. Keys and AI scores are kept out of SQLite. The backend uses fixed provider endpoints, short output limits, and no automatic retries. **Stop AI** ends the run and prevents subsequent calls. A request already sent may still count toward provider usage.
+
 ## Test
 
 ```powershell

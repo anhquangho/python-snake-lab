@@ -1,6 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SIZE, createGame, canTurn, spawnFood, step } from '../../src/snake_lab/static/engine.mjs';
+import { checkPlan } from '../../src/snake_lab/static/ai-play.mjs';
+
+test('AI plan stops at the first food and leaves the live board unchanged', () => {
+  const game = { ...createGame(), food: { x: 12, y: 7 } };
+  const original = structuredClone(game);
+  const plan = checkPlan(game, 'R4,U3,L2');
+  assert.equal(plan.reachesFood, true);
+  assert.deepEqual(plan.steps, ['right', 'right', 'right', 'right', 'up', 'up', 'up']);
+  assert.deepEqual(plan.path.at(-1), game.food);
+  assert.deepEqual(game, original);
+});
+
+test('AI plan rejects malformed, oversized, reversing, and wall-bound paths', () => {
+  const game = { ...createGame(), food: { x: 12, y: 7 } };
+  assert.throws(() => checkPlan(game, 'R4, U3'), /direction/);
+  assert.throws(() => checkPlan(game, 'R65'), /64-step/);
+  assert.throws(() => checkPlan(game, 'L1'), /Step 1 reverses/);
+  assert.throws(() => checkPlan(game, 'R12'), /Step 12 hits a wall/);
+});
+
+test('AI plan uses moving-tail rules and reports a legal partial route', () => {
+  const game = {
+    ...createGame(),
+    snake: [{ x: 1, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 2 }, { x: 2, y: 1 }],
+    direction: 'up',
+    food: { x: 12, y: 7 },
+  };
+  const plan = checkPlan(game, 'R1');
+  assert.equal(plan.reachesFood, false);
+  assert.deepEqual(plan.path.at(-1), { x: 2, y: 1 });
+  const longer = { ...game, snake: [...game.snake, { x: 3, y: 1 }] };
+  assert.throws(() => checkPlan(longer, 'R1'), /Step 1 hits the snake/);
+});
 
 test('new game has three cells and unoccupied food', () => {
   const game = createGame(() => 0);

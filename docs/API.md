@@ -52,4 +52,10 @@ The server derives score and timestamp. It does not validate a replay or prove t
 - `GET /api/stats`: `{games_played, players, best_score}` across both modes. `players` means distinct shared nicknames, not unique people.
 - `GET /api/health`: `{"status":"ok"}` after a DB query succeeds.
 
+## Request an AI plan
+
+`POST /api/ai/plan` accepts the selected provider (`openai`, `gemini`, or `anthropic`), a head-first list of `snake` cells, the current `direction`, and the `food` cell. Cells are zero-based `[x, y]` pairs on the 20 × 20 board. Pass the selected provider's key in `Authorization: Bearer <key>`. The server sends one request to that provider.
+
+The response includes `model`, `plan` (for example `R4,U3`), `issue` when there is no usable plan, `latency_ms`, and provider-reported `usage`. Unknown usage fields are null. Upstream errors are reduced to a short message. The browser enforces the per-run call limit and checks plans against the game engine before executing them.
+
 Invalid enum values, nickname formats or bounded query parameters return 422. Unknown routes return 404. JSON serialization is handled through response models. Read endpoints and startup do not provide a production error-handling layer; database failures outside score submission may surface as server errors.

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Play Snake. Explore a personal Python learning lab with FastAPI, SQLite and real player analytics.">
   <title>Snake Lab — Play. Learn. Repeat.</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23b9eb70'/%3E%3Ctext y='29' x='8' font-size='28'%3E↳%3C/text%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%23b6322e'/%3E%3Ctext y='29' x='8' font-size='28' fill='%23ffe2a5'%3E↳%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.mjs"></script>
 </head>
@@ -23,26 +23,69 @@
       <div class="workspace">
         <section class="game-panel" aria-label="Snake game">
           <div class="panel-top"><span class="eyebrow">01 / THE PLAYGROUND</span><span id="game-state" class="state-chip">READY TO PLAY</span></div>
+          <div class="play-switch" role="group" aria-label="Play style">
+            <button id="human-mode" type="button" aria-pressed="true">Human</button>
+            <button id="ai-mode" type="button" aria-pressed="false">AI Play</button>
+          </div>
           <div class="game-toolbar">
-            <label>YOUR HANDLE<input id="player-name" type="text" value="player" minlength="2" maxlength="20" pattern="[A-Za-z0-9_-]{2,20}" autocomplete="off" spellcheck="false" aria-describedby="handle-help"></label>
+            <label id="handle-label">YOUR HANDLE<input id="player-name" type="text" value="player" minlength="2" maxlength="20" pattern="[A-Za-z0-9_-]{2,20}" autocomplete="off" spellcheck="false" aria-describedby="handle-help"></label>
             <label>PACE<select id="mode"><option value="classic">Classic · steady</option><option value="sprint">Sprint · quick</option></select></label>
             <div class="score-box"><span>SCORE</span><strong id="score">000</strong></div>
           </div>
           <p id="handle-help" class="field-help">2–20 letters, numbers, _ or -. Shared nickname; no account.</p>
+          <div id="ai-setup" class="ai-setup" hidden>
+            <div class="game-toolbar ai-settings">
+              <label>PROVIDER
+                <select id="ai-provider">
+                  <option value="openai">OpenAI</option>
+                  <option value="gemini">Gemini</option>
+                  <option value="anthropic">Claude</option>
+                </select>
+              </label>
+              <label>API KEY
+                <input id="ai-key" type="password" maxlength="512" autocomplete="off" spellcheck="false" aria-describedby="ai-key-help" placeholder="Paste your API key">
+              </label>
+              <label class="ai-budget">CALL LIMIT
+                <input id="ai-budget" type="number" min="1" max="30" step="1" value="10">
+              </label>
+            </div>
+            <p id="ai-key-help" class="field-help">Start AI sends board data to the selected provider using your key. Calls may incur charges.</p>
+            <button id="clear-key" class="text-button" type="button">Clear key</button>
+          </div>
           <div class="board-wrap">
             <canvas id="board" width="600" height="600" tabindex="0" aria-label="Snake board. Use arrow keys or WASD; Space to pause."></canvas>
             <div id="overlay" class="overlay"><span class="overlay-symbol">↳</span><h2 id="overlay-title">One more bite.</h2><p id="overlay-copy">Pick a handle. Find your rhythm.</p></div>
             <div class="board-corner">20 × 20 / NO SHORTCUTS</div>
           </div>
-          <div class="game-actions"><button id="start" class="primary">Start a run <span>↗</span></button><button id="pause" class="secondary" disabled>Pause</button><span class="timer" id="timer">00:00</span></div>
+          <div class="game-actions"><button id="start" class="primary"><span id="start-label">Start a run</span> <span>↗</span></button><button id="pause" class="secondary" disabled>Pause</button><button id="stop-ai" class="secondary" hidden>Stop AI</button><span class="timer" id="timer">00:00</span></div>
           <p id="message" role="status" aria-live="polite">Ready when you are. Each snack is worth 10 points.</p>
           <div id="save-actions" hidden><button id="retry" class="secondary">Retry saving</button><button id="discard" class="text-button">Discard unsaved run</button></div>
-          <div class="touch-controls" aria-label="Direction controls"><button data-direction="up" aria-label="Move up">↑</button><div><button data-direction="left" aria-label="Move left">←</button><button data-direction="down" aria-label="Move down">↓</button><button data-direction="right" aria-label="Move right">→</button></div></div>
-          <div class="instructions"><span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> or WASD to move</span><span><kbd>space</kbd> to pause</span></div>
+          <div id="human-controls" class="touch-controls" aria-label="Direction controls"><button data-direction="up" aria-label="Move up">↑</button><div><button data-direction="left" aria-label="Move left">←</button><button data-direction="down" aria-label="Move down">↓</button><button data-direction="right" aria-label="Move right">→</button></div></div>
+          <div id="human-instructions" class="instructions"><span><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd> or WASD to move</span><span><kbd>space</kbd> to pause</span></div>
         </section>
         <aside class="sidebar">
-          <section class="card leaderboard"><div class="section-title"><p class="eyebrow">02 / THE LEADERBOARD</p><span class="tiny-icon">↗</span></div><h2>A little competition.</h2><p class="card-copy">Best run per handle. <span id="leaderboard-mode">Classic</span> pace.</p><div class="table-head"><span>PLAYER</span><span>BEST</span></div><ol id="leaderboard"><li class="empty">Loading saved runs…</li></ol><p class="footnote">Ties: shorter active time, then earlier submission.</p><button id="refresh" class="text-button">Refresh data ↻</button></section>
-          <section class="card analytics"><div class="section-title"><p class="eyebrow">03 / YOUR EXPERIMENT</p><span class="tiny-icon">⌁</span></div><h2>Every run tells a story.</h2><p class="card-copy" id="analytics-handle">player / classic</p><div class="metrics"><div><strong id="games">0</strong><span>RUNS PLAYED</span></div><div><strong id="best">0</strong><span>PERSONAL BEST</span></div><div><strong id="average">0</strong><span>AVG. SCORE</span></div><div><strong id="food">0</strong><span>SNACKS EATEN</span></div></div><div class="history-heading"><span>LAST 10 RUNS</span><span>OLDEST → NEWEST</span></div><div id="history" class="history" aria-label="Recent scores"><span class="empty">Your first run starts the story.</span></div><p class="footnote" id="time-played">Active play: 0s · Wins: 0</p><p id="data-message" role="status" class="footnote"></p></section>
+          <section id="ai-dashboard" class="card analytics ai-dashboard" aria-label="AI dashboard" hidden>
+            <div class="section-title"><p class="eyebrow">02 / AI PLAY</p><span id="ai-status" class="state-chip">Ready</span></div>
+            <h2>Inside the run.</h2>
+            <p class="card-copy">Watch the route the model proposes and the moves the board verifies.</p>
+            <div class="metrics ai-metrics">
+              <div><strong id="ai-calls">0 / 10</strong><span>API CALLS</span></div>
+              <div><strong id="ai-tokens">—</strong><span>TOKENS REPORTED</span></div>
+            </div>
+            <p id="ai-token-note" class="footnote">Provider-reported usage</p>
+            <dl class="ai-plan-details">
+              <dt>Model</dt><dd id="ai-model">—</dd>
+              <dt>Target</dt><dd id="ai-target">—</dd>
+              <dt>Plan</dt><dd id="ai-plan">—</dd>
+              <dt>Check</dt><dd id="ai-validation">Waiting for a run</dd>
+              <dt>Progress</dt><dd id="ai-progress">—</dd>
+            </dl>
+            <h3 class="eyebrow">REQUEST HISTORY</h3>
+            <div id="ai-trace" class="ai-trace"></div>
+            <p class="footnote">AI scores stay in this run. The human leaderboard tracks saved player runs.</p>
+          </section>
+          <section id="human-leaderboard" class="card leaderboard"><div class="section-title"><p class="eyebrow">02 / THE LEADERBOARD</p><span class="tiny-icon">↗</span></div><h2>A little competition.</h2><p class="card-copy">Best run per handle. <span id="leaderboard-mode">Classic</span> pace.</p><div class="table-head"><span>PLAYER</span><span>BEST</span></div><ol id="leaderboard"><li class="empty">Loading saved runs…</li></ol><p class="footnote">Ties: shorter active time, then earlier submission.</p><button id="refresh" class="text-button">Refresh data ↻</button></section>
+          <section id="human-analytics" class="card analytics"><div class="section-title"><p class="eyebrow">03 / YOUR EXPERIMENT</p><span class="tiny-icon">⌁</span></div><h2>Every run tells a story.</h2><p class="card-copy" id="analytics-handle">player / classic</p><div class="metrics"><div><strong id="games">0</strong><span>RUNS PLAYED</span></div><div><strong id="best">0</strong><span>PERSONAL BEST</span></div><div><strong id="average">0</strong><span>AVG. SCORE</span></div><div><strong id="food">0</strong><span>SNACKS EATEN</span></div></div><div class="history-heading"><span>LAST 10 RUNS</span><span>OLDEST → NEWEST</span></div><div id="history" class="history" aria-label="Recent scores"><span class="empty">Your first run starts the story.</span></div><p class="footnote" id="time-played">Active play: 0s · Wins: 0</p><p id="data-message" role="status" class="footnote"></p></section>
           <div class="learning-note"><span>⌘</span><p><strong>The game is just the beginning.</strong><br>The Python source includes a code reading map, tests, and exercises to make it your own.</p></div>
         </aside>
       </div>

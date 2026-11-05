@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from snake_lab.ai import router as ai_router
 from snake_lab.api import router
 from snake_lab.db import initialize
 
@@ -33,6 +34,7 @@ def create_app(database_path: Path | None = None) -> FastAPI:
     )
     app.state.database_path = path.resolve()
     app.include_router(router)
+    app.include_router(ai_router)
     # Mount the catch-all last so it cannot hide /api, /docs, or /openapi.json.
     app.mount("/", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="web")
     return app
