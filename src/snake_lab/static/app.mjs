@@ -1,4 +1,5 @@
 import { SIZE, SPEEDS, createGame, canTurn, step } from './engine.mjs';
+import { boardSnapshot, checkPlan, drawPlan, renderTrace, requestPlan, updateDashboard } from './ai-play.mjs';
 
 const $ = id => document.getElementById(id);
 const canvas = $('board');
@@ -6,7 +7,7 @@ const ctx = canvas.getContext('2d');
 const nameInput = $('player-name');
 const modeInput = $('mode');
 let game = createGame();
-let phase = 'ready'; // ready | running | paused | ended
+let phase = 'ready'; // ready | thinking | running | paused | ended
 let nextDirection = null;
 let elapsed = 0;
 let segmentStarted = 0;
@@ -15,6 +16,8 @@ let run = null;
 let pending = null;
 let saving = false;
 let refreshVersion = 0;
+let aiMode = false;
+let aiRun = null;
 const nicknamePattern = /^[a-z0-9_-]{2,20}$/;
 
 function formatTime(ms) {
@@ -28,41 +31,52 @@ function activeTime() {
 
 function message(text) { $('message').textContent = text; }
 
+function isActive() {
+  return phase === 'running' || phase === 'paused' || phase === 'thinking';
+}
+
 function render() {
   const unit = canvas.width / SIZE;
-  ctx.fillStyle = '#1b3027';
+  ctx.fillStyle = '#b8c397';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = '#284033';
+  ctx.strokeStyle = '#a6b18b';
   ctx.lineWidth = 1;
   for (let index = 0; index <= SIZE; index++) {
     ctx.beginPath(); ctx.moveTo(index * unit, 0); ctx.lineTo(index * unit, canvas.height); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(0, index * unit); ctx.lineTo(canvas.width, index * unit); ctx.stroke();
   }
+  drawPlan(ctx, unit, aiRun?.plan?.path, aiRun?.cursor);
   game.snake.forEach((cell, index) => {
-    ctx.fillStyle = index === 0 ? '#d3f897' : '#a8ce70';
-    ctx.beginPath(); ctx.roundRect(cell.x * unit + 2, cell.y * unit + 2, unit - 4, unit - 4, 5); ctx.fill();
+    ctx.fillStyle = index === 0 ? '#253322' : '#455538';
+    ctx.fillRect(cell.x * unit + 2, cell.y * unit + 2, unit - 4, unit - 4);
     if (index === 0) {
-      ctx.fillStyle = '#20352c';
+      ctx.fillStyle = '#dbe3bd';
       ctx.fillRect(cell.x * unit + 19, cell.y * unit + 8, 4, 4);
     }
   });
   if (game.food) {
-    ctx.fillStyle = '#ed784b';
-    ctx.beginPath(); ctx.arc((game.food.x + .5) * unit, (game.food.y + .5) * unit, unit * .28, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8d3029';
+    ctx.fillRect((game.food.x + .22) * unit, (game.food.y + .22) * unit, unit * .56, unit * .56);
   }
   $('score').textContent = String(game.foodEaten * 10).padStart(3, '0');
   $('timer').textContent = formatTime(activeTime());
+  if (aiMode) updateDashboard($, aiRun, phase, Number($('ai-budget').value) || 10);
 }
 
 function syncControls() {
-  const active = phase === 'running' || phase === 'paused';
-  nameInput.disabled = active || saving || Boolean(pending);
-  modeInput.disabled = active || saving || Boolean(pending);
-  $('start').disabled = active || saving || Boolean(pending);
+  const active = isActive();
+  const locked = active || saving || Boolean(pending);
+  nameInput.disabled = aiMode || locked;
+  modeInput.disabled = locked;
+  $('start').disabled = locked;
+  $('human-mode').disabled = locked;
+  $('ai-mode').disabled = locked;
+  for (const id of ['ai-provider', 'ai-key', 'ai-budget', 'clear-key']) $(id).disabled = active;
   $('pause').disabled = !active;
   $('pause').textContent = phase === 'paused' ? 'Resume' : 'Pause';
+  $('stop-ai').hidden = !aiMode || !active;
   $('save-actions').hidden = !pending || saving;
-  $('game-state').textContent = { ready:'READY TO PLAY', running:'RUN IN PROGRESS', paused:'PAUSED', ended:'RUN COMPLETE' }[phase];
+  $('game-state').textContent = { ready:'READY TO PLAY', thinking:'AI PLANNING', running:'RUN IN PROGRESS', paused:'PAUSED', ended:'RUN COMPLETE' }[phase];
 }
 
 function overlay(title, copy) {
@@ -73,10 +87,14 @@ function overlay(title, copy) {
 
 function requestDirection(direction) {
   // Allow one turn per tick: block right -> up -> left before the snake moves.
-  if (phase === 'running' && nextDirection === null && direction !== game.direction && canTurn(game.direction, direction)) nextDirection = direction;
+  if (!aiMode && phase === 'running' && nextDirection === null && direction !== game.direction && canTurn(game.direction, direction)) nextDirection = direction;
 }
 
 function tick() {
+  if (aiRun) {
+    tickAi();
+    return;
+  }
   game = step(game, nextDirection ?? game.direction);
   nextDirection = null;
   render();
@@ -85,6 +103,10 @@ function tick() {
 
 function start() {
   if ($('start').disabled) return;
+  if (aiMode) {
+    startAi();
+    return;
+  }
   const playerName = nameInput.value.trim().toLowerCase();
   if (!nicknamePattern.test(playerName)) {
     message('Use 2–20 letters, numbers, _ or - for your handle.');
@@ -93,30 +115,167 @@ function start() {
   }
   nameInput.value = playerName;
   run = { run_id:crypto.randomUUID(), player_name:playerName, mode:modeInput.value };
-  game = createGame();
-  elapsed = 0;
-  nextDirection = null;
-  phase = 'running';
-  segmentStarted = performance.now();
-  $('overlay').hidden = true;
-  timerId = setInterval(tick, SPEEDS[run.mode]);
-  syncControls();
-  render();
+  resetBoard();
+  beginMovement();
   canvas.focus({ preventScroll:true });
   message('Find your rhythm. Arrow keys / WASD to move; Space to pause.');
 }
 
+function resetBoard() {
+  game = createGame();
+  elapsed = 0;
+  nextDirection = null;
+}
+
+function beginMovement() {
+  phase = 'running';
+  segmentStarted = performance.now();
+  $('overlay').hidden = true;
+  timerId = setInterval(tick, SPEEDS[run?.mode ?? modeInput.value]);
+  syncControls();
+  render();
+}
+
+function setAiMode(enabled) {
+  if (aiMode === enabled || isActive() || saving || pending) return;
+  aiMode = enabled;
+  aiRun = null;
+  run = null;
+  phase = 'ready';
+  resetBoard();
+  $('human-mode').setAttribute('aria-pressed', String(!enabled));
+  $('ai-mode').setAttribute('aria-pressed', String(enabled));
+  $('handle-label').hidden = enabled;
+  $('handle-help').hidden = enabled;
+  $('ai-setup').hidden = !enabled;
+  $('ai-dashboard').hidden = !enabled;
+  $('human-leaderboard').hidden = enabled;
+  $('human-analytics').hidden = enabled;
+  $('human-controls').hidden = enabled;
+  $('human-instructions').hidden = enabled;
+  $('start-label').textContent = enabled ? 'Start AI' : 'Start a run';
+  if (enabled) {
+    overlay('Watch the planner.', 'Choose a provider and start an AI run.');
+    message('The model plans a route. The board checks and plays each move.');
+    renderTrace($('ai-trace'), []);
+  } else {
+    overlay('One more bite.', 'Pick a handle. Find your rhythm.');
+    message('Ready when you are. Each snack is worth 10 points.');
+  }
+  syncControls();
+  render();
+}
+
+function startAi() {
+  const key = $('ai-key').value.trim();
+  if (!/^[!-~]{1,512}$/.test(key)) {
+    message('Enter an API key for the selected provider.');
+    $('ai-key').focus();
+    return;
+  }
+  const budget = Number($('ai-budget').value);
+  if (!Number.isInteger(budget) || budget < 1 || budget > 30) {
+    message('Choose a call limit from 1 to 30.');
+    $('ai-budget').focus();
+    return;
+  }
+  run = null;
+  aiRun = { provider: $('ai-provider').value, budget, entries: [], plan: null, cursor: 0, controller: null };
+  resetBoard();
+  canvas.focus({ preventScroll: true });
+  void askAi();
+}
+
+function showThinking() {
+  phase = 'thinking';
+  overlay('AI thinking…', 'Waiting for the next route.');
+  syncControls();
+  render();
+}
+
+async function askAi() {
+  if (aiRun.entries.length >= aiRun.budget) {
+    finishAi('Call limit reached.');
+    return;
+  }
+  elapsed = activeTime();
+  clearInterval(timerId);
+  const currentRun = aiRun;
+  const controller = new AbortController();
+  const entry = { board: boardSnapshot(game, currentRun.provider), status: 'Requesting a route' };
+  currentRun.entries.push(entry);
+  currentRun.controller = controller;
+  currentRun.plan = null;
+  currentRun.cursor = 0;
+  renderTrace($('ai-trace'), currentRun.entries);
+  showThinking();
+  message('Waiting for the model to return a direction sequence.');
+  try {
+    const result = await requestPlan(entry.board, $('ai-key').value.trim(), controller.signal);
+    if (aiRun !== currentRun || currentRun.controller !== controller) return;
+    Object.assign(entry, { model: result.model, plan: result.plan, usage: result.usage, latency: result.latency_ms });
+    if (!result.plan) throw new Error(result.issue || 'No plan received.');
+    currentRun.plan = checkPlan(game, result.plan);
+    const { steps, reachesFood } = currentRun.plan;
+    entry.status = `${steps.length} legal steps · ${reachesFood ? 'reaches food' : 'partial route'}`;
+  } catch (error) {
+    if (aiRun !== currentRun || currentRun.controller !== controller) return;
+    const reason = error.name === 'TimeoutError' ? 'The request timed out.' : error.message;
+    entry.status = reason;
+    finishAi(reason);
+    return;
+  }
+  currentRun.controller = null;
+  renderTrace($('ai-trace'), currentRun.entries);
+  message('Plan checked. Follow the highlighted route.');
+  if (phase === 'paused') {
+    render();
+  } else {
+    beginMovement();
+  }
+}
+
+function tickAi() {
+  const before = game.foodEaten;
+  game = step(game, aiRun.plan.steps[aiRun.cursor++]);
+  render();
+  const entry = aiRun.entries.at(-1);
+  if (game.outcome) {
+    entry.status = game.outcome === 'won' ? 'Board filled' : 'Collision';
+    finishAi(game.outcome === 'won' ? 'AI filled the board.' : 'The snake collided.');
+  } else if (game.foodEaten > before || aiRun.cursor === aiRun.plan.steps.length) {
+    entry.status = game.foodEaten > before ? 'Food reached' : 'Partial route completed';
+    void askAi();
+  }
+}
+
+function finishAi(reason) {
+  elapsed = activeTime();
+  clearInterval(timerId);
+  if (aiRun.controller) {
+    aiRun.controller.abort();
+    aiRun.controller = null;
+    const entry = aiRun.entries.at(-1);
+    if (entry.status === 'Requesting a route') entry.status = reason;
+  }
+  phase = 'ended';
+  overlay('AI run complete.', reason);
+  const calls = aiRun.entries.length;
+  message(`${reason} ${game.foodEaten * 10} points · ${calls} API ${calls === 1 ? 'call' : 'calls'}.`);
+  renderTrace($('ai-trace'), aiRun.entries);
+  syncControls();
+  render();
+}
+
 function pause(force = false) {
-  if (phase === 'running') {
+  if (phase === 'running' || phase === 'thinking') {
     elapsed = activeTime();
     phase = 'paused';
     clearInterval(timerId);
     overlay('Take a breather.', 'Resume when you’re ready. The clock is paused, too.');
   } else if (phase === 'paused' && !force) {
-    phase = 'running';
-    segmentStarted = performance.now();
-    $('overlay').hidden = true;
-    timerId = setInterval(tick, SPEEDS[run.mode]);
+    if (aiRun?.controller) showThinking();
+    else beginMovement();
     canvas.focus({ preventScroll:true });
   }
   syncControls();
@@ -220,6 +379,19 @@ async function refreshData() {
 
 $('start').addEventListener('click', start);
 $('pause').addEventListener('click', () => pause());
+$('human-mode').addEventListener('click', () => setAiMode(false));
+$('ai-mode').addEventListener('click', () => setAiMode(true));
+$('stop-ai').addEventListener('click', () => finishAi('Stopped by the player.'));
+$('ai-provider').addEventListener('change', () => {
+  $('ai-key').value = '';
+  message('Enter an API key for the selected provider.');
+});
+$('clear-key').addEventListener('click', () => {
+  $('ai-key').value = '';
+  $('ai-key').focus();
+  message('API key cleared.');
+});
+$('ai-budget').addEventListener('input', render);
 $('retry').addEventListener('click', () => void saveRun());
 $('discard').addEventListener('click', () => { pending = null; syncControls(); message('Unsaved run discarded. Ready for a new run.'); });
 $('refresh').addEventListener('click', () => void refreshData());
@@ -230,7 +402,7 @@ document.addEventListener('keydown', event => {
   if (['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(event.target.tagName)) return;
   const mapping = { ArrowUp:'up', w:'up', ArrowDown:'down', s:'down', ArrowLeft:'left', a:'left', ArrowRight:'right', d:'right' };
   const direction = mapping[event.key] ?? mapping[event.key.toLowerCase()];
-  if ((direction || event.code === 'Space') && (phase === 'running' || phase === 'paused')) {
+  if ((direction || event.code === 'Space') && isActive()) {
     event.preventDefault();
     if (event.code === 'Space') pause(); else requestDirection(direction);
   }
@@ -238,7 +410,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(true); });
 window.addEventListener('blur', () => pause(true));
 window.addEventListener('beforeunload', event => {
-  if (pending || phase === 'running' || phase === 'paused') { event.preventDefault(); event.returnValue = ''; }
+  if (pending || isActive()) { event.preventDefault(); event.returnValue = ''; }
 });
 render();
 syncControls();
